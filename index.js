@@ -39,12 +39,48 @@ function getImage(points) {
 }
 
 class Board extends React.Component {	
+	constructor(props) {
+		super(props);
+		this.state = {
+			timer: 1,
+			sub_timer: 0.00,
+			direction: true
+		};
+	}
+
+	tick() {
+		let temp = this.state.direction;
+		if (this.state.timer == 40 || this.state.timer == 0) {
+			temp = !temp;
+		}
+		this.setState({ 
+			timer: temp ? this.state.timer + 1 : this.state.timer - 1, 
+			direction: temp, 
+			sub_timer: this.state.timer > 30 ? this.state.sub_timer + 0.1 : this.state.sub_timer - 0.1 
+		});
+		console.log(this.state.timer)
+	}
+
+	componentDidMount() {
+		setInterval(() => {
+			this.tick();
+		}, 10);
+	}
+
 	renderDice(i) {
 		return(
 			<Dice
-				src={getImage(this.props.points[i])}
+				src={getImage(this.props.points[i].value)}
 				onClick={() => this.props.onClick(i)}
-				style={{display: this.props.pointsDisplay[i], transform: "rotate(-45deg)", marginLeft: 30}}
+				style={{
+					display: this.props.points[i].display, 
+					transform: "rotate(" + this.props.points[i].deg + "deg) perspective(100px) translateZ(" + this.state.timer + "px)", 
+					position: "absolute", 
+					left: this.props.points[i].x, 
+					top: this.props.points[i].y,
+					width: this.props.points[i].width,
+					height: this.props.points[i].height
+				}}
 			/>
 		);
 	}
@@ -106,7 +142,16 @@ class Hand extends React.Component {
 class ThrowButton extends React.Component {
 	render () {
 		return(
-			<button className="throw" onClick={() => {this.props.onClick()}} disabled={this.props.disabled}>Бросить кости</button>
+			<button className="throw" onClick={() => {this.props.onClick()}} style={{ 
+				backgroundColor: "#DC63C2", 
+				color: "White", 
+				border: "5px solid #DC37B8", 
+				width: 180, 
+				height: 60,
+				fontSize: "20px",
+				fontWeight: "bold",
+				display: this.props.disabled ? "none" : null
+			}}>Бросить кости</button>
 		);
 	}
 }
@@ -115,8 +160,7 @@ class Game extends React.Component {
 	constructor(props) {
 		super(props);
 		this.state = {
-			pointsArray: Array(6).fill(null),
-			pointsDisplay: Array(6).fill("inline-block"),
+			diceOnBoard: Array(6).fill({ value: null, display: "inline-block", x: null, y: null, width: null, height: null, deg: null }),
 			diceOnHand: Array(6).fill({ value: null, board_index: null }),
 			score: 0,
 			re_cast: false,
@@ -124,16 +168,52 @@ class Game extends React.Component {
 	}
 	
 	throw() {
-		const points = new Array(6);
-		for (let i = 0; i < this.state.pointsArray.length; i++) {
-			points[i] = getRandomInt(1, 6);
+		const points = this.state.diceOnBoard;
+
+		const distribution = function(obj, obj_index, array) {
+			for (let i = 0; i < array.length; i++) {
+				if (obj_index == i) continue;
+
+				if (MacroCollision(obj, array[i])) return true;
+			}
+			return false;
 		}
-		this.setState({ pointsArray: points, re_cast: true });
+
+		for (let i = 0; i < points.length; i++) {
+			let gen_x = getRandomInt(30, 400), gen_y = getRandomInt(30, 400);
+
+			const temp = {
+				x: gen_x,
+				y: gen_y,
+				width: 76,
+				height: 76
+			};
+
+			if (i != 0) {
+				while (distribution(temp, i, points)) {
+					temp.x = getRandomInt(30, 400);
+					temp.y = getRandomInt(30, 400);
+				}
+			}
+
+			points[i] = {
+				value: getRandomInt(1, 6), 
+				display: "inline.block", 
+				x: temp.x, 
+				y: temp.y,
+				width: 76,
+				height: 76,
+				deg: getRandomInt(0, 360),
+			};
+		}
+
+		this.setState({ diceOnBoard: points, re_cast: false });
 	}
 		
 	takeDice(i) {
 		const tempDiceOnHand = this.state.diceOnHand;
-		tempDiceOnHand[5] = { value: this.state.pointsArray[i], board_index: i };
+		tempDiceOnHand[5] = { value: this.state.diceOnBoard[i].value, board_index: i };
+
 		tempDiceOnHand.sort((a, b) => a.value - b.value);
 		tempDiceOnHand.sort((a, b) => {
 			if (a.value == null) return 1;
@@ -141,12 +221,11 @@ class Game extends React.Component {
 			if (b.value == null) return -1;
 		});
 		
-		const tempDisplay = this.state.pointsDisplay;
-		tempDisplay[i] = "none";		
+		const tempDiceOnBoard = this.state.diceOnBoard;
+		tempDiceOnBoard[i].display = "none";		
 		
 		this.setState({ 
-			pointsArray: this.state.pointsArray,
-			display: tempDisplay,
+			diceOnBoard: tempDiceOnBoard,
 			diceOnHand: tempDiceOnHand,
 			score: this.checkScore(tempDiceOnHand),
 			re_cast: this.checkScore(tempDiceOnHand) > 0 ? false : true,
@@ -156,10 +235,8 @@ class Game extends React.Component {
 	}
 	
 	returnDice(i) {
-		//console.log('returnDice ' + i);
-		
-		const tempDisplay = this.state.pointsDisplay;
-		tempDisplay[this.state.diceOnHand[i].board_index] = "inline-block";
+		const tempDiceOnBoard = this.state.diceOnBoard;
+		tempDiceOnBoard[this.state.diceOnHand[i].board_index].display = "inline-block";
 		
 		const tempDiceOnHand = this.state.diceOnHand;
 		tempDiceOnHand[i] = { value: null, board_index: null };
@@ -171,7 +248,7 @@ class Game extends React.Component {
 		});
 		
 		this.setState({ 
-			display: tempDisplay,
+			diceOnBoard: tempDiceOnBoard,
 			diceOnHand: tempDiceOnHand,
 			score: this.checkScore(tempDiceOnHand),
 			re_cast: this.checkScore(tempDiceOnHand) > 0 ? false : true,
@@ -216,7 +293,7 @@ class Game extends React.Component {
 	render() {
 		return(
 			<div className="game" style={{ position: "absolute", left: "50%", transform: "translateX(-50%)" }}>
-				<Board points={this.state.pointsArray} pointsDisplay={this.state.pointsDisplay} onClick={i => this.takeDice(i)}/>
+				<Board points={this.state.diceOnBoard} onClick={i => this.takeDice(i)}/>
 				<ThrowButton onClick={() => this.throw()} disabled={this.state.re_cast}/>
 				<div className="player-1" style={{ width: "max-content" }}>
 					<h3 style={{color: "White"}}>Ваши кости:</h3>
@@ -231,6 +308,17 @@ class Game extends React.Component {
 function getRandomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
+
+function MacroCollision(obj1, obj2){
+	let XColl = false;
+	let YColl = false;
+  
+	if ((obj1.x + obj1.width + 40 >= obj2.x) && (obj1.x <= obj2.x + obj2.width + 40)) XColl = true;
+	if ((obj1.y + obj1.height + 40 >= obj2.y) && (obj1.y <= obj2.y + obj2.height + 40)) YColl = true;
+  
+	if (XColl&YColl){return true;}
+	return false;
+  }
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<Game />);
