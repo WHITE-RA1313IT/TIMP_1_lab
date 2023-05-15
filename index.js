@@ -39,42 +39,15 @@ function getImage(points) {
 }
 
 class Board extends React.Component {	
-	constructor(props) {
-		super(props);
-		this.state = {
-			timer: 1,
-			sub_timer: 0.00,
-			direction: true
-		};
-	}
-
-	tick() {
-		let temp = this.state.direction;
-		if (this.state.timer == 40 || this.state.timer == 0) {
-			temp = !temp;
-		}
-		this.setState({ 
-			timer: temp ? this.state.timer + 1 : this.state.timer - 1, 
-			direction: temp, 
-			sub_timer: this.state.timer > 30 ? this.state.sub_timer + 0.1 : this.state.sub_timer - 0.1 
-		});
-		console.log(this.state.timer)
-	}
-
-	componentDidMount() {
-		setInterval(() => {
-			this.tick();
-		}, 10);
-	}
-
 	renderDice(i) {
 		return(
 			<Dice
 				src={getImage(this.props.points[i].value)}
 				onClick={() => this.props.onClick(i)}
 				style={{
-					display: this.props.points[i].display, 
-					transform: "rotate(" + this.props.points[i].deg + "deg) perspective(100px) translateZ(" + this.state.timer + "px)", 
+					display: this.props.points[i].display ? "inline-block" : "none", 
+					transform: "rotate(" + this.props.points[i].deg + "deg)",
+					transition: "transform 0.7s",
 					position: "absolute", 
 					left: this.props.points[i].x, 
 					top: this.props.points[i].y,
@@ -139,10 +112,10 @@ class Hand extends React.Component {
 	}
 }
 
-class ThrowButton extends React.Component {
+class Button extends React.Component {
 	render () {
 		return(
-			<button className="throw" onClick={() => {this.props.onClick()}} style={{ 
+			<button className={this.props.className} onClick={() => {this.props.onClick()}} style={{ 
 				backgroundColor: "#DC63C2", 
 				color: "White", 
 				border: "5px solid #DC37B8", 
@@ -151,7 +124,7 @@ class ThrowButton extends React.Component {
 				fontSize: "20px",
 				fontWeight: "bold",
 				display: this.props.disabled ? "none" : null
-			}}>Бросить кости</button>
+			}}>{this.props.value}</button>
 		);
 	}
 }
@@ -160,10 +133,19 @@ class Game extends React.Component {
 	constructor(props) {
 		super(props);
 		this.state = {
-			diceOnBoard: Array(6).fill({ value: null, display: "inline-block", x: null, y: null, width: null, height: null, deg: null }),
+			diceOnBoard: Array(6).fill({ 
+				value: null,
+				display: true, 
+				x: null, 
+				y: null, 
+				width: null, 
+				height: null, 
+				deg: null 
+			}),
 			diceOnHand: Array(6).fill({ value: null, board_index: null }),
 			score: 0,
 			re_cast: false,
+			savely: true
 		};
 	}
 	
@@ -198,16 +180,23 @@ class Game extends React.Component {
 
 			points[i] = {
 				value: getRandomInt(1, 6), 
-				display: "inline.block", 
+				display: points[i].display, 
 				x: temp.x, 
 				y: temp.y,
-				width: 76,
-				height: 76,
+				width: temp.width,
+				height: temp.height,
 				deg: getRandomInt(0, 360),
 			};
 		}
 
-		this.setState({ diceOnBoard: points, re_cast: false });
+		//console.log(this.checkScore(points, 'ZONK'));
+
+		this.setState({ 
+			diceOnBoard: points, 
+			re_cast: true,  
+			diceOnHand: Array(6).fill({ value: null, board_index: null }),
+			score: this.state.score + this.checkScore(this.state.diceOnHand, 'CHECK_SCORE')
+		});
 	}
 		
 	takeDice(i) {
@@ -222,21 +211,21 @@ class Game extends React.Component {
 		});
 		
 		const tempDiceOnBoard = this.state.diceOnBoard;
-		tempDiceOnBoard[i].display = "none";		
+		tempDiceOnBoard[i].display = false;		
 		
 		this.setState({ 
 			diceOnBoard: tempDiceOnBoard,
 			diceOnHand: tempDiceOnHand,
-			score: this.checkScore(tempDiceOnHand),
-			re_cast: this.checkScore(tempDiceOnHand) > 0 ? false : true,
+			re_cast: this.checkScore(tempDiceOnHand, 'CHECK_SCORE') > 0 ? false : true,
+			savely: this.state.score + this.checkScore(tempDiceOnHand, 'CHECK_SCORE') >= 300 ? false : true
 		});
 		
-		console.log(this.state.score);
+		//console.log(this.state.score);
 	}
 	
 	returnDice(i) {
 		const tempDiceOnBoard = this.state.diceOnBoard;
-		tempDiceOnBoard[this.state.diceOnHand[i].board_index].display = "inline-block";
+		tempDiceOnBoard[this.state.diceOnHand[i].board_index].display = true;
 		
 		const tempDiceOnHand = this.state.diceOnHand;
 		tempDiceOnHand[i] = { value: null, board_index: null };
@@ -246,16 +235,19 @@ class Game extends React.Component {
 			if (a.value == b.value) return 0;
 			if (b.value == null) return -1;
 		});
+
+		console.log(tempDiceOnHand);
 		
 		this.setState({ 
 			diceOnBoard: tempDiceOnBoard,
 			diceOnHand: tempDiceOnHand,
-			score: this.checkScore(tempDiceOnHand),
-			re_cast: this.checkScore(tempDiceOnHand) > 0 ? false : true,
+			score: this.state.score + this.checkScore(tempDiceOnHand, 'CHECK_SCORE'),
+			re_cast: this.checkScore(tempDiceOnHand, 'CHECK_SCORE') > 0 ? false : true,
+			savely: this.state.score + this.checkScore(tempDiceOnHand, 'CHECK_SCORE') >= 300 ? false : true
 		});
 	}
 	
-	checkScore(points) {
+	checkScore(points, type) {
 		let res = 0;
 		let summator = Array(6).fill(0)
 
@@ -273,7 +265,7 @@ class Game extends React.Component {
 			summator[points[i].value - 1] += 1;
 		}
 		
-		console.log(summator.toString())
+		//console.log(summator.toString())
 
 		if (summator.toString() == "1,1,1,1,1,1") return 1500;
 		
@@ -283,7 +275,7 @@ class Game extends React.Component {
 
 		for (let i = 0; i < summator.length; i++) {
 			if (i == 0 || i == 4) continue;
-			if (summator[i] > 0 && summator[i] < 3) return 0;
+			if (type == 'CHECK_SCORE' && summator[i] > 0 && summator[i] < 3) return 0;
 			if (summator[i] >= 3) res += (summator[i] - 2) * (i+1) * 100;
 		}
 		
@@ -293,13 +285,24 @@ class Game extends React.Component {
 	render() {
 		return(
 			<div className="game" style={{ position: "absolute", left: "50%", transform: "translateX(-50%)" }}>
+				
 				<Board points={this.state.diceOnBoard} onClick={i => this.takeDice(i)}/>
-				<ThrowButton onClick={() => this.throw()} disabled={this.state.re_cast}/>
+
+				<Button className="throw" value="Бросить кости" onClick={() => this.throw()} disabled={this.state.re_cast}/>
+				<Button className="save" value="Сохранить" disabled={this.state.savely}/>
+
 				<div className="player-1" style={{ width: "max-content" }}>
+
 					<h3 style={{color: "White"}}>Ваши кости:</h3>
+
 					<Hand points={this.state.diceOnHand} onClick={i => this.returnDice(i)}/>
-					<h5 className="score" style={{ fontSize: "25px", color: "White", float: "right" }}>{this.state.score}</h5>	
+
+					<h5 className="score" style={{ fontSize: "25px", color: "White", float: "right" }}>{this.checkScore(this.state.diceOnHand, 'CHECK_SCORE')}</h5>
+					
+					<h3>Общий счёт: {this.state.score + this.checkScore(this.state.diceOnHand, 'CHECK_SCORE')}</h3>
+					
 				</div>
+
 			</div>	
 		);
 	}
